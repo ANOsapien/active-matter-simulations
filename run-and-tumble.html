@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Run and Tumble Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+      body { text-align: center; font-family: sans-serif; }
+      canvas { border: 1px solid black; margin-top: 10px; }
+      #controls { margin-top: 15px; }
+    </style>
+  </head>
+  <body>
+    <h2>Run and Tumble Simulation</h2>
+    <div id="controls">
+      <label>Speed: <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="2"></label>
+      <label>Tumble Rate: <input type="range" id="tumbleSlider" min="0.001" max="0.2" step="0.001" value="0.05"></label>
+    </div>
+    <script>
+      let particles = [];
+      let numParticles = 100;
+
+      let speed = 2;
+      let tumbleRate = 0.05; // probability per frame to tumble
+
+      class Particle {
+        constructor() {
+          this.x = random(width);
+          this.y = random(height);
+          this.angle = random(TWO_PI);
+        }
+
+        update() {
+          // Random tumble with probability tumbleRate
+          if (random(1) < tumbleRate) {
+            this.angle = random(TWO_PI);
+          }
+          this.x += speed * cos(this.angle);
+          this.y += speed * sin(this.angle);
+
+          // Wrap around boundaries
+          if (this.x < 0) this.x += width;
+          if (this.y < 0) this.y += height;
+          if (this.x > width) this.x -= width;
+          if (this.y > height) this.y -= height;
+        }
+
+        display() {
+          stroke(0);
+          fill(50, 150, 255);
+          circle(this.x, this.y, 5);
+        }
+      }
+
+      function setup() {
+        createCanvas(600, 600);
+        for (let i = 0; i < numParticles; i++) {
+          particles.push(new Particle());
+        }
+
+        // Link sliders
+        document.getElementById('speedSlider').addEventListener('input', e => {
+          speed = parseFloat(e.target.value);
+        });
+        document.getElementById('tumbleSlider').addEventListener('input', e => {
+          tumbleRate = parseFloat(e.target.value);
+        });
+      }
+
+      function draw() {
+        background(255);
+        for (let p of particles) {
+          p.update();
+          p.display();
+        }
+      }
+    </script>
+  </body>
+</html>
