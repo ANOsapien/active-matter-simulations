@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interactive Particle Simulations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+body { background:#222; color:white; font-family:Arial; text-align:center; }
+canvas { border:1px solid #555; margin-top:10px; display:block; margin-left:auto; margin-right:auto; }
+#buttons { margin-top:12px; }
+button { padding:6px 12px; margin:0 6px; border:none; border-radius:6px; cursor:pointer; }
+#controls { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-top:12px; }
+label { font-size:13px; }
+</style>
+</head>
+<body>
+<h2>Interactive Particle Simulations</h2>
+
+<div id="buttons">
+  <button onclick="selectSim('RTP')">Run-and-Tumble</button>
+  <button onclick="selectSim('ABP')">Active Brownian</button>
+  <button onclick="selectSim('Vicsek')">Vicsek with Forces</button>
+</div>
+
+<div id="controls">
+  <!-- Controls will be dynamically populated -->
+</div>
+
+<script>
+// ---------------- Simulation Selector ----------------
+let currentSim = 'RTP';
+function selectSim(sim){
+  currentSim = sim;
+  setupControls();
+  if(canvas) canvas.remove();
+  canvas = createCanvas(L,L);
+  initSimulation();
+}
+
+// ---------------- Global Variables ----------------
+let canvas;
+let L = 400;
+let particles = [];
+let N = 200;
+let particleSize = 8;
+let trailLength = 0;
+let noiseLevel = 0.5;
+let speedVal = 1;
+let running = false;
+let radius = 1;
+
+// ---------------- Particle Class ----------------
+class Particle {
+  constructor(x, y, theta){
+    this.x=x; this.y=y; this.theta_n=theta;
+    this.vx=0; this.vy=0;
+    this.history=[];
+  }
+  update(vx,vy,theta){
+    this.vx = vx; this.vy = vy; this.theta_n = theta;
+    this.x += this.vx; this.y += this.vy;
+
+    // PBC
+    if(this.x<0) this.x+=L;
+    if(this.x>=L) this.x-=L;
+    if(this.y<0) this.y+=L;
+    if(this.y>=L) this.y-=L;
+
+    // trail
+    if(trailLength>0){
+      this.history.push({x:this.x,y:this.y});
+      if(this.history.length>trailLength) this.history.shift();
+    }
+  }
+  display(){
+    if(trailLength>0 && this.history.length>1){
+      noFill(); stroke(255,255,0,90); beginShape();
+      for(let p of this.history) vertex(p.x,p.y);
+      endShape();
+    }
+    push(); translate(this.x,this.y); rotate(this.theta_n);
+    stroke(255,255,0); strokeWeight(2);
+    line(0,0,particleSize,0);
+    line(particleSize,0,particleSize-4,2); line(particleSize,0,particleSize-4,-2);
+    pop();
+  }
+}
+
+// ---------------- Controls ----------------
+function setupControls(){
+  let ctrl = select('#controls'); ctrl.html('');
+  // Shared controls
+  ctrl.child(createLabelSlider('Particles', 'countSlider', 10, 800, 10, N, v=>{ N=int(v); initSimulation(); }));
+  ctrl.child(createLabelSlider('Particle Size', 'sizeSlider', 3, 20, 1, particleSize, v=>particleSize=v));
+  ctrl.child(createLabelSlider('Trail Length', 'trailSlider',0,100,1,trailLength,v=>trailLength=v));
+  ctrl.child(createLabelSlider('Speed', 'speedSlider',0.01,3,0.01,speedVal,v=>speedVal=v));
+  ctrl.child(createLabelSlider('Noise', 'noiseSlider',0,2,0.01,noiseLevel,v=>noiseLevel=v));
+
+  if(currentSim==='Vicsek') ctrl.child(createLabelSlider('Interaction Radius','radiusSlider',1,10,0.5,radius,v=>radius=v));
+
+  let btn = createButton(running?'Stop':'Start'); btn.mousePressed(()=>running=!running);
+  ctrl.child(btn);
+}
+
+function createLabelSlider(labelText,id,min,max,step,value,oninput){
+  let div = createDiv('');
+  div.style('color','white'); div.style('font-size','13px'); div.style('text-align','center');
+  let lbl = createSpan(labelText+' ');
+  lbl.parent(div);
+  let slider = createSlider(min,max,step,value);
+  slider.input(()=>oninput(slider.value()));
+  slider.parent(div);
+  return div;
+}
+
+// ---------------- Simulation Initialization ----------------
+function initSimulation(){
+  particles=[];
+  for(let i=0;i<N;i++){
+    particles.push(new Particle(random(L), random(L), random(TWO_PI)));
+  }
+}
+
+// ---------------- p5.js setup ----------------
+function setup(){
+  canvas = createCanvas(L,L);
+  setupControls();
+  initSimulation();
+}
+
+// ---------------- Simulation Step ----------------
+function draw(){
+  background(34);
+  if(running){
+    if(currentSim==='RTP') stepRTP();
+    else if(currentSim==='ABP') stepABP();
+    else if(currentSim==='Vicsek') stepVicsek();
+  }
+  for(let p of particles) p.display();
+}
+
+// ---------------- RTP ----------------
+function stepRTP(){
+  for(let p of particles){
+    if(random()<0.05){ // tumble probability
+      p.theta_n = random(TWO_PI);
+    }
+    let vx = speedVal*cos(p.theta_n);
+    let vy = speedVal*sin(p.theta_n);
+    p.update(vx,vy,p.theta_n);
+  }
+}
+
+// ---------------- ABP ----------------
+function stepABP(){
+  for(let p of particles){
+    p.theta_n += random(-noiseLevel/2,noiseLevel/2);
+    let vx = speedVal*cos(p.theta_n);
+    let vy = speedVal*sin(p.theta_n);
+    p.update(vx,vy,p.theta_n);
+  }
+}
+
+// ---------------- Vicsek with Forces (simplified for browser) ----------------
+function stepVicsek(){
+  // simple pairwise interaction
+  let forces = Array.from({length:N},()=>[0,0]);
+  for(let i=0;i<N;i++){
+    for(let j=i+1;j<N;j++){
+      let dx = particles[j].x - particles[i].x; let dy = particles[j].y - particles[i].y;
+      if(dx>L/2) dx-=L; if(dx<-L/2) dx+=L;
+      if(dy>L/2) dy-=L; if(dy<-L/2) dy+=L;
+      let d2 = dx*dx+dy*dy;
+      if(d2<1e-12 || sqrt(d2)>radius) continue;
+      let d = sqrt(d2);
+      let Fmag = (d<Req)?Frep*(d-Req)/Req:-Fadh*(d-Req)/(radius-Req);
+      let fx = Fmag*dx/d, fy=Fmag*dy/d;
+      forces[i][0]+=fx; forces[i][1]+=fy;
+      forces[j][0]-=fx; forces[j][1]-=fy;
+    }
+  }
+  for(let i=0;i<N;i++){
+    let vmag = sqrt(particles[i].vx*particles[i].vx + particles[i].vy*particles[i].vy);
+    let nx=cos(particles[i].theta_n), ny=sin(particles[i].theta_n);
+    let vxn = speedVal*cos(particles[i].theta_n), vyn = speedVal*sin(particles[i].theta_n);
+    let cross = nx*vyn-ny*vxn;
+    let relax = asin(cross);
+    let theta = particles[i].theta_n + dt*(relax/tau)+random(-noiseLevel/2,noiseLevel/2);
+    let vx = speedVal*cos(theta)+forces[i][0]; let vy = speedVal*sin(theta)+forces[i][1];
+    particles[i].update(vx,vy,theta);
+  }
+}
+</script>
+</body>
+</html>
