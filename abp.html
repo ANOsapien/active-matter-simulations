@@ -1,133 +1,122 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <title>Active Brownian Particles</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-    <style>
-      body { text-align: center; font-family: sans-serif; }
-      canvas { border: 1px solid black; margin-top: 10px; }
-      #controls { margin-top: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; }
-      label { font-size: 14px; }
-    </style>
-  </head>
-  <body>
-    <h2>Active Brownian Particles</h2>
-    <div id="controls">
-      <label>Speed <input type="range" id="speedSlider" min="0.1" max="10" step="0.1" value="2"></label>
-      <label>Noise Strength <input type="range" id="noiseSlider" min="0" max="1" step="0.01" value="0.1"></label>
-      <label>Number of Particles <input type="range" id="countSlider" min="10" max="500" step="10" value="100"></label>
-      <label>Particle Size <input type="range" id="sizeSlider" min="2" max="15" step="1" value="6"></label>
-      <label>Trail Length <input type="range" id="trailSlider" min="0" max="200" step="10" value="0"></label>
-      <button id="pauseBtn">Pause</button>
-    </div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Active Brownian Particles </title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body { background:#222; color:white; font-family:Arial; text-align:center; }
+    canvas { border:1px solid #444; margin-top:10px; }
+    #controls { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:12px; }
+    label { font-size:13px; }
+    button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h2>Active Brownian Particles (ABP) </h2>
 
-    <script>
-      let particles = [];
-      let numParticles = 100;
+  <div id="controls">
+    <label>Speed <input id="speedSlider" type="range" min="0.01" max="6" step="0.01" value="2"></label>
+    <label>Noise (rotational) <input id="noiseSlider" type="range" min="0" max="1" step="0.01" value="0.12"></label>
+    <label>Particles <input id="countSlider" type="range" min="10" max="800" step="10" value="200"></label>
+    <label>Arrow Size <input id="sizeSlider" type="range" min="3" max="20" step="1" value="8"></label>
+    <label>Trail Length <input id="trailSlider" type="range" min="0" max="300" step="1" value="0"></label>
+    <button id="startBtn">Start</button>
+  </div>
 
-      let speed = 2;
-      let noiseStrength = 0.1;
-      let particleSize = 6;
-      let trailLength = 0;
-      let paused = false;
+<script>
+let particles = [];
+let N = 200;
+let speed = 2;
+let noiseStrength = 0.12;
+let arrowLen = 8;
+let trailLength = 0;
+const L = 800;
+let running = false;
 
-      class Particle {
-        constructor() {
-          this.x = random(width);
-          this.y = random(height);
-          this.angle = random(TWO_PI);
-          this.history = [];
-        }
+class Particle {
+  constructor() {
+    this.x = random(L);
+    this.y = random(L);
+    this.angle = random(TWO_PI);
+    this.history = [];
+  }
+  update() {
+    const prevX = this.x, prevY = this.y;
+    // rotational diffusion: gaussian noise scaled by noiseStrength
+    this.angle += randomGaussian() * noiseStrength;
+    // move
+    this.x += speed * cos(this.angle);
+    this.y += speed * sin(this.angle);
 
-        update() {
-          // Gradual angular diffusion
-          this.angle += randomGaussian(0, noiseStrength);
+    // if large jump (wrap-around) -> break trail
+    if (abs(this.x - prevX) > L/2 || abs(this.y - prevY) > L/2) {
+      this.history = [];
+    }
 
-          // Update position
-          this.x += speed * cos(this.angle);
-          this.y += speed * sin(this.angle);
+    // periodic wrap
+    if (this.x < 0) this.x += L;
+    if (this.y < 0) this.y += L;
+    if (this.x >= L) this.x -= L;
+    if (this.y >= L) this.y -= L;
 
-          // Wrap boundaries
-          if (this.x < 0) this.x += width;
-          if (this.y < 0) this.y += height;
-          if (this.x > width) this.x -= width;
-          if (this.y > height) this.y -= height;
+    // store trail
+    if (trailLength > 0) {
+      this.history.push({x: this.x, y: this.y});
+      if (this.history.length > trailLength) this.history.shift();
+    }
+  }
+  display() {
+    // draw trail
+    if (trailLength > 0 && this.history.length > 1) {
+      noFill();
+      stroke(255, 150, 150, 80);
+      beginShape();
+      for (let p of this.history) vertex(p.x, p.y);
+      endShape();
+    }
+    // draw quiver
+    push();
+    translate(this.x, this.y);
+    rotate(this.angle);
+    stroke(255, 100, 100);
+    strokeWeight(2);
+    line(0,0, arrowLen, 0);
+    line(arrowLen,0, arrowLen-5, 3);
+    line(arrowLen,0, arrowLen-5, -3);
+    pop();
+  }
+}
 
-          // Trail
-          if (trailLength > 0) {
-            this.history.push({ x: this.x, y: this.y });
-            if (this.history.length > trailLength) {
-              this.history.shift();
-            }
-          }
-        }
+function setup() {
+  createCanvas(L, L);
+  initParticles();
 
-        display() {
-          // Draw trail
-          if (trailLength > 0) {
-            noFill();
-            stroke(0, 100);
-            beginShape();
-            for (let pos of this.history) {
-              vertex(pos.x, pos.y);
-            }
-            endShape();
-          }
+  select('#speedSlider').input(e => speed = parseFloat(e.target.value));
+  select('#noiseSlider').input(e => noiseStrength = parseFloat(e.target.value));
+  select('#countSlider').input(e => { N = parseInt(e.target.value); initParticles(); });
+  select('#sizeSlider').input(e => arrowLen = parseInt(e.target.value));
+  select('#trailSlider').input(e => trailLength = parseInt(e.target.value));
+  select('#startBtn').mousePressed(() => {
+    running = !running;
+    const b = select('#startBtn');
+    b.html(running ? 'Stop' : 'Start');
+    b.style('background', running ? '#c0392b' : '#27ae60');
+  });
+}
 
-          // Draw quiver
-          stroke(255, 100, 100);
-          strokeWeight(2);
-          push();
-          translate(this.x, this.y);
-          rotate(this.angle);
-          line(0, 0, particleSize, 0);
-          line(particleSize, 0, particleSize - 4, 2);
-          line(particleSize, 0, particleSize - 4, -2);
-          pop();
-        }
-      }
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < N; i++) particles.push(new Particle());
+}
 
-      function setup() {
-        createCanvas(800, 800);
-        for (let i = 0; i < numParticles; i++) {
-          particles.push(new Particle());
-        }
-
-        // Sliders
-        document.getElementById('speedSlider').addEventListener('input', e => speed = parseFloat(e.target.value));
-        document.getElementById('noiseSlider').addEventListener('input', e => noiseStrength = parseFloat(e.target.value));
-        document.getElementById('countSlider').addEventListener('input', e => {
-          numParticles = parseInt(e.target.value);
-          resetParticles();
-        });
-        document.getElementById('sizeSlider').addEventListener('input', e => particleSize = parseInt(e.target.value));
-        document.getElementById('trailSlider').addEventListener('input', e => trailLength = parseInt(e.target.value));
-
-        // Pause button
-        document.getElementById('pauseBtn').addEventListener('click', () => paused = !paused);
-      }
-
-      function resetParticles() {
-        particles = [];
-        for (let i = 0; i < numParticles; i++) {
-          particles.push(new Particle());
-        }
-      }
-
-      function draw() {
-        background(255);
-        if (!paused) {
-          for (let p of particles) {
-            p.update();
-            p.display();
-          }
-        } else {
-          for (let p of particles) {
-            p.display();
-          }
-        }
-      }
-    </script>
-  </body>
+function draw() {
+  background(34);
+  if (running) {
+    for (let p of particles) { p.update(); }
+  }
+  for (let p of particles) p.display();
+}
+</script>
+</body>
 </html>
