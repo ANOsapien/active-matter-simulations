@@ -2,176 +2,163 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Vicsek Model Simulation</title>
+  <title>Vicsek Model</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <style>
-    body {
-      background: #222;
-      color: white;
-      text-align: center;
-      font-family: Arial, sans-serif;
-    }
-    canvas {
-      border: 1px solid #555;
-      margin-top: 10px;
-    }
-    #controls {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 15px;
-      margin-top: 15px;
-    }
-    label {
-      font-size: 14px;
-    }
-    button {
-      padding: 6px 12px;
-      background: green;
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      border-radius: 5px;
-    }
-    button.stop {
-      background: red;
-    }
+    body { background:#222; color:white; font-family:Arial; text-align:center; }
+    canvas { border:1px solid #555; margin-top:10px; }
+    #controls { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-top:12px; }
+    label { font-size:13px; }
+    button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; }
   </style>
 </head>
 <body>
-  <h2>Vicsek Model Simulation</h2>
-
+  <h2>Vicsek Model</h2>
   <div id="controls">
-    <label>Noise <input type="range" id="noiseSlider" min="0" max="2" step="0.01" value="0.3"></label>
-    <label>Speed <input type="range" id="speedSlider" min="0.01" max="3" step="0.01" value="0.3"></label>
-    <label>Particles <input type="range" id="countSlider" min="10" max="1000" step="10" value="300"></label>
-    <label>Radius <input type="range" id="radiusSlider" min="1" max="20" step="0.5" value="5"></label>
-    <button id="startStopBtn">Start</button>
+    <label>Noise <input id="noiseSlider" type="range" min="0" max="2" step="0.01" value="0.3"></label>
+    <label>Speed <input id="speedSlider" type="range" min="0.01" max="3" step="0.01" value="0.3"></label>
+    <label>Particles <input id="countSlider" type="range" min="10" max="800" step="10" value="300"></label>
+    <label>Particle Size <input id="sizeSlider" type="range" min="3" max="20" step="1" value="8"></label>
+    <label>Trail Length <input id="trailSlider" type="range" min="0" max="200" step="1" value="0"></label>
+    <label>Interaction Radius <input id="radiusSlider" type="range" min="1" max="20" step="0.5" value="5"></label>
+    <button id="startBtn">Start</button>
   </div>
 
-  <script>
-    let particles = [];
-    let N = 300;
-    let noise = 0.3;
-    let speed = 0.3;
-    let radius = 5;
-    let L = 800; // Box size matches canvas
-    let running = false;
+<script>
+let particles = [];
+let N = 300;
+let noiseLevel = 0.3;
+let speed = 0.3;
+let particleSize = 8;
+let trailLength = 0;
+let radius = 5;
+let running = false;
 
-    class Particle {
-      constructor() {
-        this.x = random(L);
-        this.y = random(L);
-        this.angle = random(TWO_PI);
-      }
+// Adaptive canvas size
+let canvasSize = 800;
+function adaptCanvasSize() {
+  // If particleSize > 12 and N large, reduce grid size to avoid overcrowding
+  canvasSize = particleSize > 12 ? max(400, 800 - particleSize*10) : 800;
+  resizeCanvas(canvasSize, canvasSize);
+}
 
-      update() {
-        // Move particle
-        this.x += speed * cos(this.angle);
-        this.y += speed * sin(this.angle);
+class Particle {
+  constructor() {
+    this.x = random(canvasSize);
+    this.y = random(canvasSize);
+    this.angle = random(TWO_PI);
+    this.history = [];
+  }
 
-        // Periodic boundary conditions
-        if (this.x < 0) this.x += L;
-        if (this.y < 0) this.y += L;
-        if (this.x >= L) this.x -= L;
-        if (this.y >= L) this.y -= L;
-      }
+  update() {
+    let prevX = this.x, prevY = this.y;
 
-      display() {
-        stroke(255, 255, 0);
-        strokeWeight(2);
-        push();
-        translate(this.x, this.y);
-        rotate(this.angle);
-        line(0, 0, 8, 0); // main quiver line
-        line(8, 0, 5, 2); // arrowhead
-        line(8, 0, 5, -2);
-        pop();
-      }
+    // Compute new angle based on neighbors
+    // (averaging done in draw loop for performance)
+    this.x += speed * cos(this.angle);
+    this.y += speed * sin(this.angle);
+
+    // Detect wrap-around and break trail
+    if (abs(this.x - prevX) > canvasSize/2 || abs(this.y - prevY) > canvasSize/2) {
+      this.history = [];
     }
 
-    function setup() {
-      createCanvas(L, L);
-      initParticles();
+    // Periodic boundaries
+    if (this.x < 0) this.x += canvasSize;
+    if (this.y < 0) this.y += canvasSize;
+    if (this.x >= canvasSize) this.x -= canvasSize;
+    if (this.y >= canvasSize) this.y -= canvasSize;
 
-      // Hook up sliders
-      document.getElementById('noiseSlider').addEventListener('input', e => noise = parseFloat(e.target.value));
-      document.getElementById('speedSlider').addEventListener('input', e => speed = parseFloat(e.target.value));
-      document.getElementById('countSlider').addEventListener('input', e => {
-        N = parseInt(e.target.value);
-        initParticles();
-      });
-      document.getElementById('radiusSlider').addEventListener('input', e => radius = parseFloat(e.target.value));
-
-      // Start/Stop button
-      document.getElementById('startStopBtn').addEventListener('click', () => {
-        running = !running;
-        let btn = document.getElementById('startStopBtn');
-        btn.textContent = running ? 'Stop' : 'Start';
-        btn.classList.toggle('stop', running);
-      });
+    // Save trail
+    if (trailLength > 0) {
+      this.history.push({x:this.x, y:this.y});
+      if (this.history.length > trailLength) this.history.shift();
     }
+  }
 
-    function initParticles() {
-      particles = [];
-      for (let i = 0; i < N; i++) {
-        particles.push(new Particle());
-      }
+  display() {
+    // Draw trail
+    if (trailLength > 0 && this.history.length > 1) {
+      noFill();
+      stroke(255, 255, 0, 90);
+      beginShape();
+      for (let p of this.history) vertex(p.x, p.y);
+      endShape();
     }
+    // Draw quiver arrow
+    push();
+    translate(this.x, this.y);
+    rotate(this.angle);
+    stroke(255,255,0);
+    strokeWeight(2);
+    line(0,0, particleSize,0);
+    line(particleSize,0, particleSize-4, 2);
+    line(particleSize,0, particleSize-4, -2);
+    pop();
+  }
+}
 
-    function draw() {
-      background(34);
+function setup() {
+  createCanvas(canvasSize, canvasSize);
+  initParticles();
 
-      if (running) {
-        // Compute new angles
-        let newAngles = [];
-        for (let i = 0; i < N; i++) {
-          let p = particles[i];
-          let sumSin = 0;
-          let sumCos = 0;
-          let count = 0;
+  select('#speedSlider').input(e => speed = parseFloat(e.target.value));
+  select('#noiseSlider').input(e => noiseLevel = parseFloat(e.target.value));
+  select('#countSlider').input(e => { N = parseInt(e.target.value); initParticles(); });
+  select('#sizeSlider').input(e => { particleSize = parseInt(e.target.value); adaptCanvasSize(); });
+  select('#trailSlider').input(e => trailLength = parseInt(e.target.value));
+  select('#radiusSlider').input(e => radius = parseFloat(e.target.value));
+  select('#startBtn').mousePressed(() => {
+    running = !running;
+    const b = select('#startBtn');
+    b.html(running ? 'Stop' : 'Start');
+    b.style('background', running ? '#c0392b' : '#27ae60');
+  });
+}
 
-          for (let j = 0; j < N; j++) {
-            if (i === j) continue;
-            let q = particles[j];
-            // Compute periodic distance
-            let dx = p.x - q.x;
-            let dy = p.y - q.y;
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < N; i++) particles.push(new Particle());
+}
 
-            // Wrap-around for periodic boundary
-            if (abs(dx) > L / 2) dx -= Math.sign(dx) * L;
-            if (abs(dy) > L / 2) dy -= Math.sign(dy) * L;
+function draw() {
+  background(34);
 
-            let dist = sqrt(dx * dx + dy * dy);
-            if (dist < radius) {
-              sumSin += sin(q.angle);
-              sumCos += cos(q.angle);
-              count++;
-            }
-          }
-
-          if (count > 0) {
-            let avgAngle = atan2(sumSin, sumCos);
-            // Add noise uniformly in [-noise/2, noise/2]
-            newAngles[i] = avgAngle + random(-noise / 2, noise / 2);
-          } else {
-            newAngles[i] = p.angle;
-          }
+  if (running) {
+    // Compute new angles
+    let newAngles = [];
+    for (let i=0; i<N; i++){
+      let p = particles[i];
+      let sumSin=0, sumCos=0, count=0;
+      for (let j=0;j<N;j++){
+        if(i===j) continue;
+        let q = particles[j];
+        let dx = p.x - q.x;
+        let dy = p.y - q.y;
+        // periodic distance
+        if(abs(dx)>canvasSize/2) dx-=Math.sign(dx)*canvasSize;
+        if(abs(dy)>canvasSize/2) dy-=Math.sign(dy)*canvasSize;
+        let dist = sqrt(dx*dx + dy*dy);
+        if(dist < radius){
+          sumSin += sin(q.angle);
+          sumCos += cos(q.angle);
+          count++;
         }
-
-        // Update all particles
-        for (let i = 0; i < N; i++) {
-          particles[i].angle = newAngles[i];
-          particles[i].update();
-        }
       }
-
-      // Draw all particles
-      for (let p of particles) {
-        p.display();
-      }
+      if(count>0){
+        let avg = atan2(sumSin,sumCos);
+        newAngles[i] = avg + random(-noiseLevel/2, noiseLevel/2);
+      } else newAngles[i] = p.angle;
     }
-  </script>
+
+    for(let i=0;i<N;i++){
+      particles[i].angle = newAngles[i];
+      particles[i].update();
+    }
+  }
+
+  for(let p of particles) p.display();
+}
+</script>
 </body>
 </html>
