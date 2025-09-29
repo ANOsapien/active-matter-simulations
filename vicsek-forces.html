@@ -10,6 +10,7 @@ canvas { border:1px solid #555; margin-top:10px; }
 #controls { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-top:12px; }
 label { font-size:13px; }
 button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; }
+input[type=range] { width:100px; }
 </style>
 </head>
 <body>
@@ -20,13 +21,14 @@ button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; }
 <label>Speed <input id="speedSlider" type="range" min="0.01" max="3" step="0.01" value="1"></label>
 <label>Particle Size <input id="sizeSlider" type="range" min="3" max="20" step="1" value="8"></label>
 <label>Trail Length <input id="trailSlider" type="range" min="0" max="100" step="1" value="0"></label>
-<button id="startBtn">Start</button>
+<label>Interaction Radius <input id="radiusSlider" type="range" min="0.5" max="10" step="0.5" value="1"></label>
+<button id="startBtn" style="background:#27ae60">Start</button>
 </div>
 
 <script>
 const v0 = 1.0, mu = 1.0, tau = 1.0, R0 = 1.0, Req = 5/6, Frep = 30, Fadh = 0.75, dt=0.05;
 
-let L = 100;  // box size
+let L = 400;  // canvas size
 let particles = [];
 let N = 200;
 let noiseLevel = 0.6;
@@ -34,6 +36,7 @@ let particleSize = 8;
 let trailLength = 0;
 let running = false;
 let radius = 1;
+let speedVal = 1;
 
 let cellSize = R0*1.05;
 let nCells = Math.max(3, Math.floor(L/cellSize));
@@ -42,33 +45,29 @@ let cellList = [];
 class Particle {
   constructor(x, y, theta) {
     this.x = x; this.y = y; this.theta_n = theta;
-    this.vx = v0*cos(theta); this.vy = v0*sin(theta);
+    this.vx = v0*Math.cos(theta); this.vy = v0*Math.sin(theta);
     this.history = [];
   }
   update(fx, fy){
-    // update velocity
-    let sx = v0*cos(this.theta_n), sy = v0*sin(this.theta_n);
+    let sx = v0*Math.cos(this.theta_n), sy = v0*Math.sin(this.theta_n);
     this.vx = mu*(sx + fx); this.vy = mu*(sy + fy);
 
-    // update angle
-    let vmag = sqrt(this.vx*this.vx + this.vy*this.vy);
+    let vmag = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
     if(vmag>1e-12){
-      let nx=cos(this.theta_n), ny=sin(this.theta_n);
+      let nx=Math.cos(this.theta_n), ny=Math.sin(this.theta_n);
       let cross = nx*(this.vy/vmag)-ny*(this.vx/vmag);
-      let relax = asin(cross);
+      if(cross>1) cross=1; if(cross<-1) cross=-1;
+      let relax = Math.asin(cross);
       this.theta_n += dt*(relax/tau) + random(-noiseLevel/2,noiseLevel/2);
     } else this.theta_n += random(-noiseLevel/2,noiseLevel/2);
 
-    // update position
     this.x += this.vx*dt; this.y += this.vy*dt;
 
-    // PBC
     if(this.x<0) this.x+=L;
     if(this.x>=L) this.x-=L;
     if(this.y<0) this.y+=L;
     if(this.y>=L) this.y-=L;
 
-    // trails
     if(trailLength>0){
       this.history.push({x:this.x,y:this.y});
       if(this.history.length>trailLength) this.history.shift();
@@ -90,7 +89,7 @@ class Particle {
 
 function initParticles(){
   particles=[];
-  let nSide = ceil(sqrt(N));
+  let nSide = Math.ceil(Math.sqrt(N));
   let dx = L/nSide;
   for(let i=0,idx=0;i<nSide && idx<N;i++){
     for(let j=0;j<nSide && idx<N;j++){
@@ -103,14 +102,19 @@ function initParticles(){
 function setup(){
   createCanvas(L,L); initParticles();
 
-  select('#countSlider').input(e=>{ N=int(e.target.value); initParticles(); });
+  select('#countSlider').input(e=>{ N=parseInt(e.target.value); initParticles(); });
   select('#noiseSlider').input(e=>noiseLevel=parseFloat(e.target.value));
-  select('#speedSlider').input(e=>speedSlider=parseFloat(e.target.value));
+  select('#speedSlider').input(e=>speedVal=parseFloat(e.target.value));
   select('#sizeSlider').input(e=>particleSize=parseInt(e.target.value));
   select('#trailSlider').input(e=>trailLength=parseInt(e.target.value));
   select('#radiusSlider').input(e=>radius=parseFloat(e.target.value));
 
-  select('#startBtn').mousePressed(()=>{running=!running; let b=select('#startBtn'); b.html(running?'Stop':'Start'); b.style('background', running?'#c0392b':'#27ae60'); });
+  select('#startBtn').mousePressed(()=>{
+    running=!running;
+    let b=select('#startBtn');
+    b.html(running?'Stop':'Start');
+    b.style('background', running?'#c0392b':'#27ae60');
+  });
 }
 
 function buildCellList(){
@@ -126,14 +130,13 @@ function buildCellList(){
   }
 }
 
-// compute pairwise forces
 function pairwise_force(pi,pj){
   let dx = pj.x - pi.x; let dy = pj.y - pi.y;
   if(dx> L/2) dx-=L; if(dx<-L/2) dx+=L;
   if(dy> L/2) dy-=L; if(dy<-L/2) dy+=L;
   let d2 = dx*dx+dy*dy;
-  if(d2<1e-12 || sqrt(d2)>=R0) return [0,0];
-  let d = sqrt(d2), Fmag = (d<Req)?Frep*(d-Req)/Req:-Fadh*(d-Req)/(R0-Req);
+  if(d2<1e-12 || Math.sqrt(d2)>=R0) return [0,0];
+  let d = Math.sqrt(d2), Fmag = (d<Req)?Frep*(d-Req)/Req:-Fadh*(d-Req)/(R0-Req);
   return [Fmag*dx/d,Fmag*dy/d];
 }
 
@@ -143,7 +146,6 @@ function draw(){
     buildCellList();
     let forces = Array.from({length:N},()=>[0,0]);
 
-    // loop over cells and neighbors
     for(let cx=0;cx<nCells;cx++){
       for(let cy=0;cy<nCells;cy++){
         let idx = cy*nCells + cx;
@@ -170,6 +172,7 @@ function draw(){
 
     for(let i=0;i<N;i++) particles[i].update(forces[i][0],forces[i][1]);
   }
+
   for(let p of particles) p.display();
 }
 </script>
