@@ -2,76 +2,131 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Run and Tumble Simulation</title>
+    <title>Run and Tumble - Quiver</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
       body { text-align: center; font-family: sans-serif; }
       canvas { border: 1px solid black; margin-top: 10px; }
-      #controls { margin-top: 15px; }
+      #controls { margin-top: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; }
+      label { font-size: 14px; }
     </style>
   </head>
   <body>
-    <h2>Run and Tumble Simulation</h2>
+    <h2>Run and Tumble Simulation (RTP) with Quivers</h2>
     <div id="controls">
-      <label>Speed: <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="2"></label>
-      <label>Tumble Rate: <input type="range" id="tumbleSlider" min="0.001" max="0.2" step="0.001" value="0.05"></label>
+      <label>Speed <input type="range" id="speedSlider" min="0.1" max="10" step="0.1" value="2"></label>
+      <label>Tumble Rate <input type="range" id="tumbleSlider" min="0.001" max="0.2" step="0.001" value="0.05"></label>
+      <label>Particles <input type="range" id="countSlider" min="10" max="500" step="10" value="100"></label>
+      <label>Trail Length <input type="range" id="trailSlider" min="0" max="200" step="10" value="0"></label>
+      <button id="pauseBtn">Pause</button>
     </div>
+
     <script>
       let particles = [];
       let numParticles = 100;
 
       let speed = 2;
-      let tumbleRate = 0.05; // probability per frame to tumble
+      let tumbleRate = 0.05;
+      let particleSize = 6;
+      let trailLength = 0;
+      let paused = false;
 
       class Particle {
         constructor() {
           this.x = random(width);
           this.y = random(height);
           this.angle = random(TWO_PI);
+          this.history = [];
         }
 
         update() {
-          // Random tumble with probability tumbleRate
+          // Random tumble event
           if (random(1) < tumbleRate) {
             this.angle = random(TWO_PI);
           }
+
+          // Update position
           this.x += speed * cos(this.angle);
           this.y += speed * sin(this.angle);
 
-          // Wrap around boundaries
+          // Boundary wrap
           if (this.x < 0) this.x += width;
           if (this.y < 0) this.y += height;
           if (this.x > width) this.x -= width;
           if (this.y > height) this.y -= height;
+
+          // Store trail history
+          if (trailLength > 0) {
+            this.history.push({ x: this.x, y: this.y });
+            if (this.history.length > trailLength) {
+              this.history.shift();
+            }
+          }
         }
 
         display() {
-          stroke(0);
-          fill(50, 150, 255);
-          circle(this.x, this.y, 5);
+          // Draw trail
+          if (trailLength > 0) {
+            noFill();
+            stroke(0, 100);
+            beginShape();
+            for (let pos of this.history) {
+              vertex(pos.x, pos.y);
+            }
+            endShape();
+          }
+
+          // Draw quiver arrow
+          stroke(50, 150, 255);
+          strokeWeight(2);
+          push();
+          translate(this.x, this.y);
+          rotate(this.angle);
+          line(0, 0, particleSize, 0);        // main line
+          line(particleSize, 0, particleSize - 4, 2); // arrow tip
+          line(particleSize, 0, particleSize - 4, -2);
+          pop();
         }
       }
 
       function setup() {
-        createCanvas(600, 600);
+        createCanvas(800, 800);
         for (let i = 0; i < numParticles; i++) {
           particles.push(new Particle());
         }
 
-        // Link sliders
-        document.getElementById('speedSlider').addEventListener('input', e => {
-          speed = parseFloat(e.target.value);
+        // Sliders
+        document.getElementById('speedSlider').addEventListener('input', e => speed = parseFloat(e.target.value));
+        document.getElementById('tumbleSlider').addEventListener('input', e => tumbleRate = parseFloat(e.target.value));
+        document.getElementById('countSlider').addEventListener('input', e => {
+          numParticles = parseInt(e.target.value);
+          resetParticles();
         });
-        document.getElementById('tumbleSlider').addEventListener('input', e => {
-          tumbleRate = parseFloat(e.target.value);
-        });
+        document.getElementById('sizeSlider').addEventListener('input', e => particleSize = parseInt(e.target.value));
+        document.getElementById('trailSlider').addEventListener('input', e => trailLength = parseInt(e.target.value));
+
+        // Pause button
+        document.getElementById('pauseBtn').addEventListener('click', () => paused = !paused);
+      }
+
+      function resetParticles() {
+        particles = [];
+        for (let i = 0; i < numParticles; i++) {
+          particles.push(new Particle());
+        }
       }
 
       function draw() {
         background(255);
-        for (let p of particles) {
-          p.update();
-          p.display();
+        if (!paused) {
+          for (let p of particles) {
+            p.update();
+            p.display();
+          }
+        } else {
+          for (let p of particles) {
+            p.display();
+          }
         }
       }
     </script>
