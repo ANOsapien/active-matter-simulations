@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vicsek Model Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body {
+      background: #222;
+      color: white;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      border: 1px solid #555;
+      margin-top: 10px;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 15px;
+    }
+    label {
+      font-size: 14px;
+    }
+    button {
+      padding: 6px 12px;
+      background: green;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 5px;
+    }
+    button.stop {
+      background: red;
+    }
+  </style>
+</head>
+<body>
+  <h2>Vicsek Model Simulation</h2>
+
+  <div id="controls">
+    <label>Noise <input type="range" id="noiseSlider" min="0" max="2" step="0.01" value="0.3"></label>
+    <label>Speed <input type="range" id="speedSlider" min="0.01" max="3" step="0.01" value="0.3"></label>
+    <label>Particles <input type="range" id="countSlider" min="10" max="1000" step="10" value="300"></label>
+    <label>Radius <input type="range" id="radiusSlider" min="1" max="20" step="0.5" value="5"></label>
+    <button id="startStopBtn">Start</button>
+  </div>
+
+  <script>
+    let particles = [];
+    let N = 300;
+    let noise = 0.3;
+    let speed = 0.3;
+    let radius = 5;
+    let L = 800; // Box size matches canvas
+    let running = false;
+
+    class Particle {
+      constructor() {
+        this.x = random(L);
+        this.y = random(L);
+        this.angle = random(TWO_PI);
+      }
+
+      update() {
+        // Move particle
+        this.x += speed * cos(this.angle);
+        this.y += speed * sin(this.angle);
+
+        // Periodic boundary conditions
+        if (this.x < 0) this.x += L;
+        if (this.y < 0) this.y += L;
+        if (this.x >= L) this.x -= L;
+        if (this.y >= L) this.y -= L;
+      }
+
+      display() {
+        stroke(255, 255, 0);
+        strokeWeight(2);
+        push();
+        translate(this.x, this.y);
+        rotate(this.angle);
+        line(0, 0, 8, 0); // main quiver line
+        line(8, 0, 5, 2); // arrowhead
+        line(8, 0, 5, -2);
+        pop();
+      }
+    }
+
+    function setup() {
+      createCanvas(L, L);
+      initParticles();
+
+      // Hook up sliders
+      document.getElementById('noiseSlider').addEventListener('input', e => noise = parseFloat(e.target.value));
+      document.getElementById('speedSlider').addEventListener('input', e => speed = parseFloat(e.target.value));
+      document.getElementById('countSlider').addEventListener('input', e => {
+        N = parseInt(e.target.value);
+        initParticles();
+      });
+      document.getElementById('radiusSlider').addEventListener('input', e => radius = parseFloat(e.target.value));
+
+      // Start/Stop button
+      document.getElementById('startStopBtn').addEventListener('click', () => {
+        running = !running;
+        let btn = document.getElementById('startStopBtn');
+        btn.textContent = running ? 'Stop' : 'Start';
+        btn.classList.toggle('stop', running);
+      });
+    }
+
+    function initParticles() {
+      particles = [];
+      for (let i = 0; i < N; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    function draw() {
+      background(34);
+
+      if (running) {
+        // Compute new angles
+        let newAngles = [];
+        for (let i = 0; i < N; i++) {
+          let p = particles[i];
+          let sumSin = 0;
+          let sumCos = 0;
+          let count = 0;
+
+          for (let j = 0; j < N; j++) {
+            if (i === j) continue;
+            let q = particles[j];
+            // Compute periodic distance
+            let dx = p.x - q.x;
+            let dy = p.y - q.y;
+
+            // Wrap-around for periodic boundary
+            if (abs(dx) > L / 2) dx -= Math.sign(dx) * L;
+            if (abs(dy) > L / 2) dy -= Math.sign(dy) * L;
+
+            let dist = sqrt(dx * dx + dy * dy);
+            if (dist < radius) {
+              sumSin += sin(q.angle);
+              sumCos += cos(q.angle);
+              count++;
+            }
+          }
+
+          if (count > 0) {
+            let avgAngle = atan2(sumSin, sumCos);
+            // Add noise uniformly in [-noise/2, noise/2]
+            newAngles[i] = avgAngle + random(-noise / 2, noise / 2);
+          } else {
+            newAngles[i] = p.angle;
+          }
+        }
+
+        // Update all particles
+        for (let i = 0; i < N; i++) {
+          particles[i].angle = newAngles[i];
+          particles[i].update();
+        }
+      }
+
+      // Draw all particles
+      for (let p of particles) {
+        p.display();
+      }
+    }
+  </script>
+</body>
+</html>
